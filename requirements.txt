@@ -1,0 +1,13 @@
+# PyTorch (>= 2.6) и torchvision берутся из шаблона RunPod, здесь их нет специально.
+
+# Поддержка Qwen-Image-2.1 (QwenImage21Pipeline) пока есть только в основной ветке diffusers
+# (войдёт в релиз 0.41). Коммит зафиксирован, чтобы установка не сломалась от будущих изменений.
+diffusers @ git+https://github.com/huggingface/diffusers@bdc2bea37a36038c44452811610489ea30ede229
+
+# Текстовый энкодер Qwen3-VL требует transformers >= 5.17
+transformers==5.17.0
+huggingface-hub>=1.32.0,<2.0
+accelerate>=1.1.0
+safetensors>=0.8.0
+pillow
+gradio==6.28.0
