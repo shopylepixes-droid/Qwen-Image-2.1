@@ -1,4 +1,4 @@
-"""Веб-интерфейс Qwen-Image-2.1: создание картинок по тексту и по референсам (до 10), 1K/2K, прозрачный фон.
+"""Веб-интерфейс Qwen-Image-2.1: создание картинок по тексту и по референсам (до 10) в 2K, прозрачный фон.
 
 Запуск на RunPod:  bash start.sh
 Параметры:        python app.py --help
@@ -30,22 +30,14 @@ MAX_REFERENCES = 10
 FULL_GPU_MIN_VRAM_GB = 70
 TEXT_OFFLOAD_MIN_VRAM_GB = 40
 
-# Рекомендуемые размеры из карточки модели: 2K — её родное разрешение, 1K — те же пропорции около
-# 1 мегапикселя, в 4–5 раз быстрее. Стороны кратны 32, как требует модель.
+# Все картинки делаются в 2K — родном разрешении модели (около 4 Мп); размеры из карточки модели.
+# Меньшее разрешение давало заметно худшее качество, поэтому его нет. Стороны кратны 32, как требует модель.
 ASPECTS = ["1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16"]
 SIZES = {
-    "1K": {
-        "1:1": (1024, 1024), "4:3": (1152, 864), "3:4": (864, 1152), "3:2": (1216, 832),
-        "2:3": (832, 1216), "16:9": (1344, 768), "9:16": (768, 1344),
-    },
-    "2K": {
-        "1:1": (2048, 2048), "4:3": (2400, 1792), "3:4": (1792, 2400), "3:2": (2528, 1696),
-        "2:3": (1696, 2528), "16:9": (2752, 1536), "9:16": (1536, 2752),
-    },
+    "1:1": (2048, 2048), "4:3": (2400, 1792), "3:4": (1792, 2400), "3:2": (2528, 1696),
+    "2:3": (1696, 2528), "16:9": (2752, 1536), "9:16": (1536, 2752),
 }
-RESOLUTION_SIDE = {"1K": 1024, "2K": 2048}
-RESOLUTION_LABELS = {"1K (~1 Мп, быстро)": "1K", "2K (~4 Мп, родное для модели, в ~5 раз дольше)": "2K"}
-DEFAULT_RESOLUTION = "2K"
+OUTPUT_SIDE = 2048
 FOLLOW_LAST, FOLLOW_FIRST = "Как у последней картинки", "Как у первой картинки"
 
 # Каждый референс модель читает в разрешении результата. Чтобы 10 референсов при 2K влезли в 48 ГБ,
@@ -195,16 +187,16 @@ def run_pipeline(prompt, images, width, height, transparent, seed, randomize_see
         if release_text_encoder:
             release_text_encoder()
         torch.cuda.empty_cache()
-        raise gr.Error("Не хватило видеопамяти. Выберите 1K, выключите CFG или загрузите меньше картинок.")
+        raise gr.Error("Не хватило видеопамяти. Выключите CFG или загрузите меньше картинок.")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     result.save(OUTPUT_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}_seed{seed}.png")
     return result, seed
 
 
-def text_to_image(prompt, resolution, aspect, transparent, seed, randomize_seed, steps, negative_prompt, cfg,
+def text_to_image(prompt, aspect, transparent, seed, randomize_seed, steps, negative_prompt, cfg,
                   progress=gr.Progress()):
-    width, height = SIZES[RESOLUTION_LABELS[resolution]][aspect]
+    width, height = SIZES[aspect]
     return run_pipeline(
         prompt, None, width, height, transparent, seed, randomize_seed, steps, negative_prompt, cfg, progress
     )
@@ -221,29 +213,25 @@ def load_references(gallery) -> list[Image.Image]:
     return [ImageOps.exif_transpose(Image.open(path)) for path in paths]
 
 
-def edit_image(prompt, gallery, resolution, aspect, transparent, seed, randomize_seed, steps, negative_prompt, cfg,
+def edit_image(prompt, gallery, aspect, transparent, seed, randomize_seed, steps, negative_prompt, cfg,
                progress=gr.Progress()):
     images = load_references(gallery)
-    resolution = RESOLUTION_LABELS[resolution]
     if aspect in (FOLLOW_LAST, FOLLOW_FIRST):
-        width, height = size_like(images[-1] if aspect == FOLLOW_LAST else images[0], RESOLUTION_SIDE[resolution])
+        width, height = size_like(images[-1] if aspect == FOLLOW_LAST else images[0], OUTPUT_SIDE)
     else:
-        width, height = SIZES[resolution][aspect]
+        width, height = SIZES[aspect]
     return run_pipeline(
         prompt, images, width, height, transparent, seed, randomize_seed, steps, negative_prompt, cfg, progress
     )
 
 
 def output_settings(aspects):
-    with gr.Row():
-        default = next(label for label, key in RESOLUTION_LABELS.items() if key == DEFAULT_RESOLUTION)
-        resolution = gr.Radio(label="Разрешение", choices=list(RESOLUTION_LABELS), value=default)
-        aspect = gr.Dropdown(label="Пропорции", choices=aspects, value=aspects[0])
+    aspect = gr.Dropdown(label="Пропорции (разрешение всегда 2K)", choices=aspects, value=aspects[0])
     transparent = gr.Checkbox(
         label="Прозрачный фон (PNG с альфа-каналом)",
         info="Добавляет к запросу формулировку, при которой модель рисует прозрачный фон",
     )
-    return resolution, aspect, transparent
+    return aspect, transparent
 
 
 def advanced_settings():
@@ -282,7 +270,7 @@ def build_ui() -> gr.Blocks:
                     t2i_output_settings = output_settings(ASPECTS)
                     t2i_button = gr.Button("Создать", variant="primary")
                     t2i_advanced = advanced_settings()
-                    gr.Examples(examples=EXAMPLES, inputs=[t2i_prompt, t2i_output_settings[2]], label="Примеры")
+                    gr.Examples(examples=EXAMPLES, inputs=[t2i_prompt, t2i_output_settings[1]], label="Примеры")
                 with gr.Column():
                     t2i_output = gr.Image(label="Результат", type="pil", format="png")
                     t2i_seed_used = gr.Number(label="Использованный seed", interactive=False)
