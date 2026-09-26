@@ -45,6 +45,7 @@ SIZES = {
 }
 RESOLUTION_SIDE = {"1K": 1024, "2K": 2048}
 RESOLUTION_LABELS = {"1K (~1 Мп, быстро)": "1K", "2K (~4 Мп, родное для модели, в ~5 раз дольше)": "2K"}
+DEFAULT_RESOLUTION = "2K"
 FOLLOW_LAST, FOLLOW_FIRST = "Как у последней картинки", "Как у первой картинки"
 
 # Каждый референс модель читает в разрешении результата. Чтобы 10 референсов при 2K влезли в 48 ГБ,
@@ -235,7 +236,8 @@ def edit_image(prompt, gallery, resolution, aspect, transparent, seed, randomize
 
 def output_settings(aspects):
     with gr.Row():
-        resolution = gr.Radio(label="Разрешение", choices=list(RESOLUTION_LABELS), value=next(iter(RESOLUTION_LABELS)))
+        default = next(label for label, key in RESOLUTION_LABELS.items() if key == DEFAULT_RESOLUTION)
+        resolution = gr.Radio(label="Разрешение", choices=list(RESOLUTION_LABELS), value=default)
         aspect = gr.Dropdown(label="Пропорции", choices=aspects, value=aspects[0])
     transparent = gr.Checkbox(
         label="Прозрачный фон (PNG с альфа-каналом)",

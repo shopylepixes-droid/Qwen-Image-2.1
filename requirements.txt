@@ -11,3 +11,8 @@ accelerate>=1.1.0
 safetensors>=0.8.0
 pillow
 gradio==6.28.0
+
+# Для remove_bg.py (модель удаления фона BiRefNet_HR)
+timm==1.0.30
+kornia==0.8.3
+einops==0.8.2
