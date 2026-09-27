@@ -32,6 +32,8 @@ RED_CIRCLE = ("Fix only the area inside the red circle: [что исправит
               "image 1 exactly the same: the same character, pose, face, expression, colors, soft watercolor "
               "illustration style and composition.")
 NOT_WIDGETS = {"IMAGE", "MASK", "LATENT", "CONDITIONING", "MODEL", "CLIP", "VAE"}
+# Как называется переключатель помощника (refine_prompt) внутри шаблона; в редактировании `switch` — это custom_size.
+PE_SWITCH = {"t2i": "switch", "edit": "switch_1"}
 
 
 def load_template(name):
@@ -75,8 +77,17 @@ def set_widgets(workflow, **values):
     for name, value in values.items():
         if name in names:
             widgets[names.index(name)] = value
-        elif name != "switch_1":  # переключателя помощника нет только во встроенных шаблонах
+        elif name != PE_SWITCH.get(node_kind(workflow)):  # помощника нет только во встроенных шаблонах
             raise SystemExit(f"В шаблоне нет настройки {name}: формат шаблона изменился")
+
+
+def node_kind(workflow):
+    return "t2i" if any(n["type"] == "ResolutionSelector" for n in workflow["nodes"]) else "edit"
+
+
+def enable_pe(workflow):
+    """Включает помощника для запросов (переключатель refine_prompt в блоке Qwen)."""
+    set_widgets(workflow, **{PE_SWITCH[node_kind(workflow)]: True})
 
 
 def keep_alpha(workflow, load_id):
@@ -116,8 +127,8 @@ def drop_node(workflow, node_id):
             out["links"] = [l for l in out.get("links") or [] if l not in gone]
 
 
-def edit_workflow(prompt=None, use_pe=None, single=False):
-    """Редактирование по картинкам: bf16, 2K, 40 шагов, прозрачность образцов сохраняется.
+def edit_workflow(prompt=None, single=False):
+    """Редактирование по картинкам: bf16, 2K, 40 шагов, помощник включён, прозрачность образцов сохраняется.
 
     single=True оставляет одну картинку-образец вместо двух из официального примера.
     """
@@ -125,9 +136,8 @@ def edit_workflow(prompt=None, use_pe=None, single=False):
     values = {"resolution": SIDE, "steps": STEPS}
     if prompt is not None:
         values["prompt"] = prompt
-    if use_pe is not None:
-        values["switch_1"] = use_pe
     set_widgets(workflow, **values)
+    enable_pe(workflow)
     loads = sorted(n["id"] for n in workflow["nodes"] if n["type"] == "LoadImage")
     if single:
         for extra in loads[1:]:
@@ -148,6 +158,7 @@ def use_example_image(workflow):
 def build():
     t2i = to_bf16(load_template("image_qwen_image_2_1_t2i"))
     set_widgets(t2i, steps=STEPS)
+    enable_pe(t2i)
     for node in t2i["nodes"]:
         if node["type"] == "ResolutionSelector":
             node["widgets_values"][1:3] = [4.0, 32]  # 4 мегапикселя = 2K, стороны кратны 32
@@ -157,8 +168,9 @@ def build():
 
     edit = edit_workflow()
 
-    # Для персонажей помощник выключен: он описывает героя своими словами («a blue lizard») и ломает сходство.
-    pose = edit_workflow(RGBA.format(NEW_POSE), use_pe=False, single=True)
+    # Помощник включён и здесь. Если персонаж теряет сходство с образцом (помощник описал его своими словами,
+    # например «a blue lizard»), выключите refine_prompt.
+    pose = edit_workflow(RGBA.format(NEW_POSE), single=True)
     fix = copy.deepcopy(pose)
     set_widgets(fix, prompt=RGBA.format(RED_CIRCLE))
 
