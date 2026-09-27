@@ -36,12 +36,12 @@ mkdir -p "$WORKDIR" "$HF_HOME"
 free_gb=$(df -Pk "$WORKDIR" | awk 'NR==2 {print int($4 / 1024 / 1024)}')
 echo "Свободно в $WORKDIR: ${free_gb} ГБ"
 if [ "$free_gb" -lt 45 ] && [ ! -d "$HF_HOME/hub/models--${MODEL_ID//\//--}" ]; then
-  fail "Мало места в $WORKDIR (${free_gb} ГБ). Модель весит ~33 ГБ, нужно минимум 45 ГБ свободно. Увеличьте Volume Disk (см. README.md)."
+  fail "Мало места в $WORKDIR (${free_gb} ГБ). Модель весит ~33 ГБ, нужно минимум 45 ГБ свободно. Увеличьте Container Disk до 80 GB (см. README.md)."
 fi
 
 say "Создаю окружение Python в $VENV"
 # --system-site-packages: берём готовый PyTorch из шаблона, не скачивая его заново.
-# Окружение лежит в /workspace, поэтому переживает остановку пода.
+# Окружение лежит в /workspace: если у пода есть Volume Disk, оно переживает остановку пода.
 if [ ! -x "$VENV/bin/python" ]; then
   if ! python3 -m venv --system-site-packages "$VENV" 2>/dev/null; then
     rm -rf "$VENV"
